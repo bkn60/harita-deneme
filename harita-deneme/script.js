@@ -22,18 +22,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // Haritayı yükleme kısmı
     fetch('turkiye_harita.svg')
         .then(cevap => {
-            // Eğer dosya bulunamazsa (örn: klasör sorunu yüzünden) sessizce kalmasın, hata versin
             if (!cevap.ok) throw new Error("SVG dosyası bulunamadı!");
             return cevap.text();
         })
         .then(svgKodu => {
             haritaAlani.innerHTML = svgKodu;
-
-            // ---> İŞTE BURAYI UNUTMUŞTUK! Harita yüklenince yazıyı düzelt:
             isimAlani.textContent = "Bölge adını görmek için haritanın üzerine gelin";
 
-            const paths = haritaAlani.querySelectorAll('svg path');
+            const svgElement = haritaAlani.querySelector('svg');
+            const paths = svgElement.querySelectorAll('path');
             
+            // 1. Hover (Üzerine gelme) olayları
             paths.forEach(path => {
                 path.addEventListener('mouseenter', () => {
                     let bolgeId = path.getAttribute('id');
@@ -51,9 +50,60 @@ document.addEventListener('DOMContentLoaded', () => {
                     isimAlani.textContent = "Bölge adını görmek için haritanın üzerine gelin";
                 });
             });
+
+            // 2. Harita üzerine il/bölge isimlerini kalıcı olarak yazdırma
+            ilIsimleriniYazdir(svgElement);
         })
         .catch(hata => {
             isimAlani.textContent = "HATA: Harita bulunamadı! (turkiye_harita.svg aynı klasörde mi?)";
             console.error('Hata detayı:', hata);
         });
+
+    function ilIsimleriniYazdir(svgElement) {
+        const svgNS = "http://www.w3.org/2000/svg";
+        const etiketGrubu = document.createElementNS(svgNS, "g");
+        etiketGrubu.setAttribute("id", "harita-etiketleri");
+        svgElement.appendChild(etiketGrubu);
+
+        // Tekrar eden isimleri (örneğin İstanbul'un 2 yakası gibi) önlemek için kayıt tutalım
+        const islenenIdler = new Set();
+        const hedefler = svgElement.querySelectorAll('g[id], path[id]');
+
+        hedefler.forEach(eleman => {
+            const id = eleman.getAttribute('id');
+            
+            // Geçersiz, kapsayıcı veya daha önce yazılmış ID'leri atla
+            if (!id || id === "harita-etiketleri" || id.startsWith("layer") || islenenIdler.has(id)) {
+                return;
+            }
+
+            // Eğer bu eleman bir <path> ise ve üstündeki <g> etiketinin zaten bir id'si varsa, 
+            // yazıyı <g> etiketi üzerinden ortalamak için bu <path>'i atla
+            if (eleman.tagName.toLowerCase() === 'path' && 
+                eleman.parentElement.tagName.toLowerCase() === 'g' && 
+                eleman.parentElement.getAttribute('id')) {
+                return;
+            }
+
+            const bbox = eleman.getBBox();
+            if (bbox.width === 0 || bbox.height === 0) return;
+
+            islenenIdler.add(id);
+
+            // Kutunun tam merkezini bul
+            let centerX = bbox.x + bbox.width / 2;
+            let centerY = bbox.y + bbox.height / 2;
+
+            // Alt çizgi (_) veya tire (-) varsa boşlukla değiştir (ör: "Istanbul_1" -> "Istanbul 1")
+            const gorunenIsim = id.replace(/[_-]/g, ' ');
+
+            const text = document.createElementNS(svgNS, "text");
+            text.setAttribute("x", centerX);
+            text.setAttribute("y", centerY);
+            text.setAttribute("class", "il-etiket");
+            text.textContent = gorunenIsim;
+
+            etiketGrubu.appendChild(text);
+        });
+    }
 });
