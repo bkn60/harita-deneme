@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const kalinlikDeger = document.getElementById('kalinlik-deger');
     const root = document.documentElement; 
 
-    // Renk seçici değiştiğinde
+    // Renk seçici değiştiğinde sadece yeni tıklamalar ve hover için rengi günceller
     renkSecici.addEventListener('input', (e) => {
         root.style.setProperty('--hover-renk', e.target.value);
     });
@@ -30,72 +30,96 @@ document.addEventListener('DOMContentLoaded', () => {
             isimAlani.textContent = "Bölge adını görmek için haritanın üzerine gelin";
 
             const svgElement = haritaAlani.querySelector('svg');
-            const paths = svgElement.querySelectorAll('path');
-            
-            // 1. Hover (Üzerine gelme) olayları
-            paths.forEach(path => {
-                path.addEventListener('mouseenter', () => {
-                    let bolgeId = path.getAttribute('id');
-                    
-                    if (!bolgeId && path.parentElement.tagName.toLowerCase() === 'g') {
-                        bolgeId = path.parentElement.getAttribute('id');
-                    }
+            const paths = Array.from(svgElement.querySelectorAll('path'));
 
-                    if (bolgeId) {
-                        isimAlani.textContent = bolgeId;
+            // Her path için gerçek il adını bul (kendi id'si veya sadece o ile ait üst <g> id'si)
+            function ilAdiniBul(path) {
+                if (path.getAttribute('id')) {
+                    return path.getAttribute('id');
+                }
+                const parent = path.parentElement;
+                // Üstteki <g> etiketi tüm haritayı değil (en fazla 15 parçayı) kapsıyorsa il grubudur
+                if (parent && parent.tagName.toLowerCase() === 'g' && parent.getAttribute('id')) {
+                    if (parent.querySelectorAll('path').length < 15) {
+                        return parent.getAttribute('id');
                     }
+                }
+                return null;
+            }
+
+            // Aynı il adına sahip tüm parçaları (örn. İstanbul'un iki yakasını) eşleştir
+            const ilGruplari = {};
+            paths.forEach(path => {
+                const hamId = ilAdiniBul(path);
+                if (!hamId) return;
+
+                if (!ilGruplari[hamId]) {
+                    ilGruplari[hamId] = [];
+                }
+                ilGruplari[hamId].push(path);
+
+                // Hover (Üzerine gelme)
+                path.addEventListener('mouseenter', () => {
+                    isimAlani.textContent = hamId.replace(/[_-]/g, ' ');
                 });
 
                 path.addEventListener('mouseleave', () => {
                     isimAlani.textContent = "Bölge adını görmek için haritanın üzerine gelin";
                 });
+
+                // Tıklama ile kalıcı boyama
+                path.addEventListener('click', () => {
+                    const seciliRenk = renkSecici.value.toLowerCase();
+                    const ilParcalari = ilGruplari[hamId];
+                    const mevcutRenk = ilParcalari[0].getAttribute('data-boyali');
+
+                    ilParcalari.forEach(parca => {
+                        if (mevcutRenk === seciliRenk) {
+                            // Zaten aynı renge boyalıysa boyayı temizle
+                            parca.style.removeProperty('fill');
+                            parca.removeAttribute('data-boyali');
+                        } else {
+                            // Seçili renge kalıcı olarak boya
+                            parca.style.setProperty('fill', seciliRenk, 'important');
+                            parca.setAttribute('data-boyali', seciliRenk);
+                        }
+                    });
+                });
             });
 
-            // 2. Harita üzerine il/bölge isimlerini kalıcı olarak yazdırma
-            ilIsimleriniYazdir(svgElement);
+            // Harita üzerine il/bölge isimlerini yazdırma
+            ilIsimleriniYazdir(svgElement, ilGruplari);
         })
         .catch(hata => {
             isimAlani.textContent = "HATA: Harita bulunamadı! (turkiye_harita.svg aynı klasörde mi?)";
             console.error('Hata detayı:', hata);
         });
 
-    function ilIsimleriniYazdir(svgElement) {
+    function ilIsimleriniYazdir(svgElement, ilGruplari) {
         const svgNS = "http://www.w3.org/2000/svg";
         const etiketGrubu = document.createElementNS(svgNS, "g");
         etiketGrubu.setAttribute("id", "harita-etiketleri");
         svgElement.appendChild(etiketGrubu);
 
-        // Tekrar eden isimleri (örneğin İstanbul'un 2 yakası gibi) önlemek için kayıt tutalım
-        const islenenIdler = new Set();
-        const hedefler = svgElement.querySelectorAll('g[id], path[id]');
+        Object.entries(ilGruplari).forEach(([hamId, parcalar]) => {
+            // Birden fazla parçalı illerde (İstanbul, Çanakkale vb.) en büyük parçanın merkezini bul
+            let enBuyukBBox = null;
+            let maxAlan = 0;
 
-        hedefler.forEach(eleman => {
-            const id = eleman.getAttribute('id');
-            
-            // Geçersiz, kapsayıcı veya daha önce yazılmış ID'leri atla
-            if (!id || id === "harita-etiketleri" || id.startsWith("layer") || islenenIdler.has(id)) {
-                return;
-            }
+            parcalar.forEach(parca => {
+                const bbox = parca.getBBox();
+                const alan = bbox.width * bbox.height;
+                if (alan > maxAlan) {
+                    maxAlan = alan;
+                    enBuyukBBox = bbox;
+                }
+            });
 
-            // Eğer bu eleman bir <path> ise ve üstündeki <g> etiketinin zaten bir id'si varsa, 
-            // yazıyı <g> etiketi üzerinden ortalamak için bu <path>'i atla
-            if (eleman.tagName.toLowerCase() === 'path' && 
-                eleman.parentElement.tagName.toLowerCase() === 'g' && 
-                eleman.parentElement.getAttribute('id')) {
-                return;
-            }
+            if (!enBuyukBBox || maxAlan === 0) return;
 
-            const bbox = eleman.getBBox();
-            if (bbox.width === 0 || bbox.height === 0) return;
-
-            islenenIdler.add(id);
-
-            // Kutunun tam merkezini bul
-            let centerX = bbox.x + bbox.width / 2;
-            let centerY = bbox.y + bbox.height / 2;
-
-            // Alt çizgi (_) veya tire (-) varsa boşlukla değiştir (ör: "Istanbul_1" -> "Istanbul 1")
-            const gorunenIsim = id.replace(/[_-]/g, ' ');
+            const centerX = enBuyukBBox.x + enBuyukBBox.width / 2;
+            const centerY = enBuyukBBox.y + enBuyukBBox.height / 2;
+            const gorunenIsim = hamId.replace(/[_-]/g, ' ');
 
             const text = document.createElementNS(svgNS, "text");
             text.setAttribute("x", centerX);
