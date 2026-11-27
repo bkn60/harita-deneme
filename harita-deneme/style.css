@@ -14,9 +14,12 @@ body {
     color: white;
 }
 
-h2 { margin-top: 30px; margin-bottom: 10px; }
+h2 { 
+    margin-top: 30px; 
+    margin-bottom: 10px; 
+}
 
-/* YENİ EKLENEN KISIM: Kontrol Paneli Tasarımı */
+/* Kontrol Paneli Tasarımı */
 .kontroller {
     display: flex;
     gap: 30px;
@@ -61,16 +64,20 @@ input[type="range"] {
 
 /* Harita bölgesi ayarları */
 svg path {
-    transition: fill 0.3s ease, filter 0.3s ease;
+    transition: fill 0.2s ease, filter 0.2s ease;
     cursor: pointer;
-    /* Kalınlık artık değişkenle belirleniyor ve SVG'nin kendi ayarını eziyor (!important) */
     stroke-width: var(--sinir-kalinligi) !important; 
 }
 
-/* İmleç bölgenin üzerine geldiğinde olacaklar */
-svg path:hover {
+/* SADECE henüz boyanmamış illerin üzerine gelindiğinde önizleme rengi göster */
+svg path:not([data-boyali]):hover {
     fill: var(--hover-renk) !important;
-    filter: drop-shadow(0px 0px 8px var(--hover-renk));
+    filter: drop-shadow(0px 0px 6px var(--hover-renk));
+}
+
+/* Boyanmış illerin üzerine gelindiğinde rengini bozmadan sadece hafif parlaklık ver */
+svg path[data-boyali]:hover {
+    filter: brightness(1.12);
 }
 
 #bolge-ismi {
@@ -79,26 +86,20 @@ svg path:hover {
     min-height: 30px;
     color: #f1c40f;
 }
-    font-size: 24px;
-    font-weight: bold;
-    min-height: 30px;
-    color: #f1c40f;
-}
+
 /* Harita üzerindeki il/bölge isimleri */
 .il-etiket {
     font-family: Arial, Helvetica, sans-serif;
-    font-size: 8px; /* Yazılar büyük veya küçük gelirse bu sayıyı değiştirebilirsiniz (örn: 6px veya 10px) */
+    font-size: 9px;
     font-weight: bold;
     fill: #111111;
     text-anchor: middle;
     dominant-baseline: central;
-    pointer-events: none; /* Fare ile ilin üzerine gelmeyi engellemez */
+    pointer-events: none;
     user-select: none;
-    
-    /* Yazının koyu renklerde bile okunması için beyaz dış kontur */
     paint-order: stroke;
     stroke: #ffffff;
-    stroke-width: 2px;
+    stroke-width: 2.5px;
     stroke-linecap: round;
     stroke-linejoin: round;
 }
