@@ -5,21 +5,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const renkSecici = document.getElementById('renk-secici');
     const kalinlikSecici = document.getElementById('kalinlik-secici');
     const kalinlikDeger = document.getElementById('kalinlik-deger');
+    const sifirlaBtn = document.getElementById('sifirla-btn');
+    const indirBtn = document.getElementById('indir-btn');
     const root = document.documentElement; 
 
-    // Renk seçici değiştiğinde sadece yeni tıklamalar ve hover için rengi günceller
     renkSecici.addEventListener('input', (e) => {
         root.style.setProperty('--hover-renk', e.target.value);
     });
 
-    // Kalınlık çubuğu değiştiğinde
     kalinlikSecici.addEventListener('input', (e) => {
         const yeniKalinlik = e.target.value + 'px';
         kalinlikDeger.textContent = yeniKalinlik; 
         root.style.setProperty('--sinir-kalinligi', yeniKalinlik); 
     });
 
-    // Haritayı yükleme kısmı
     fetch('turkiye_harita.svg')
         .then(cevap => {
             if (!cevap.ok) throw new Error("SVG dosyası bulunamadı!");
@@ -32,13 +31,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const svgElement = haritaAlani.querySelector('svg');
             const paths = Array.from(svgElement.querySelectorAll('path'));
 
-            // Her path için gerçek il adını bul (kendi id'si veya sadece o ile ait üst <g> id'si)
             function ilAdiniBul(path) {
                 if (path.getAttribute('id')) {
                     return path.getAttribute('id');
                 }
                 const parent = path.parentElement;
-                // Üstteki <g> etiketi tüm haritayı değil (en fazla 15 parçayı) kapsıyorsa il grubudur
                 if (parent && parent.tagName.toLowerCase() === 'g' && parent.getAttribute('id')) {
                     if (parent.querySelectorAll('path').length < 15) {
                         return parent.getAttribute('id');
@@ -47,7 +44,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 return null;
             }
 
-            // Aynı il adına sahip tüm parçaları (örn. İstanbul'un iki yakasını) eşleştir
             const ilGruplari = {};
             paths.forEach(path => {
                 const hamId = ilAdiniBul(path);
@@ -58,7 +54,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 ilGruplari[hamId].push(path);
 
-                // Hover (Üzerine gelme)
                 path.addEventListener('mouseenter', () => {
                     isimAlani.textContent = hamId.replace(/[_-]/g, ' ');
                 });
@@ -67,7 +62,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     isimAlani.textContent = "Bölge adını görmek için haritanın üzerine gelin";
                 });
 
-                // Tıklama ile kalıcı boyama
                 path.addEventListener('click', () => {
                     const seciliRenk = renkSecici.value.toLowerCase();
                     const ilParcalari = ilGruplari[hamId];
@@ -75,11 +69,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     ilParcalari.forEach(parca => {
                         if (mevcutRenk === seciliRenk) {
-                            // Zaten aynı renge boyalıysa boyayı temizle
                             parca.style.removeProperty('fill');
                             parca.removeAttribute('data-boyali');
                         } else {
-                            // Seçili renge kalıcı olarak boya
                             parca.style.setProperty('fill', seciliRenk, 'important');
                             parca.setAttribute('data-boyali', seciliRenk);
                         }
@@ -87,8 +79,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
 
-            // Harita üzerine il/bölge isimlerini yazdırma
             ilIsimleriniYazdir(svgElement, ilGruplari);
+
+            // Haritayı Sıfırla Butonu
+            sifirlaBtn.addEventListener('click', () => {
+                paths.forEach(parca => {
+                    parca.style.removeProperty('fill');
+                    parca.removeAttribute('data-boyali');
+                });
+            });
+
+            // Haritayı PNG Olarak İndir Butonu
+            indirBtn.addEventListener('click', () => {
+                haritayiPngIndir(svgElement);
+            });
         })
         .catch(hata => {
             isimAlani.textContent = "HATA: Harita bulunamadı! (turkiye_harita.svg aynı klasörde mi?)";
@@ -102,7 +106,6 @@ document.addEventListener('DOMContentLoaded', () => {
         svgElement.appendChild(etiketGrubu);
 
         Object.entries(ilGruplari).forEach(([hamId, parcalar]) => {
-            // Birden fazla parçalı illerde (İstanbul, Çanakkale vb.) en büyük parçanın merkezini bul
             let enBuyukBBox = null;
             let maxAlan = 0;
 
@@ -129,5 +132,60 @@ document.addEventListener('DOMContentLoaded', () => {
 
             etiketGrubu.appendChild(text);
         });
+    }
+
+    function haritayiPngIndir(svgElement) {
+        const klonSvg = svgElement.cloneNode(true);
+        const kalinlik = kalinlikSecici.value + 'px';
+
+        // CSS stillerini indirilecek görselin içine göm
+        const styleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");
+        styleEl.textContent = `
+            path { stroke-width: ${kalinlik}; }
+            .il-etiket {
+                font-family: Arial, Helvetica, sans-serif;
+                font-size: 9px;
+                font-weight: bold;
+                fill: #111111;
+                text-anchor: middle;
+                dominant-baseline: central;
+                paint-order: stroke;
+                stroke: #ffffff;
+                stroke-width: 2.5px;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+            }
+        `;
+        klonSvg.insertBefore(styleEl, klonSvg.firstChild);
+
+        const bbox = svgElement.getBoundingClientRect();
+        const genislik = Math.max(bbox.width * 2, 1600);
+        const yukseklik = Math.max(bbox.height * 2, 800);
+        klonSvg.setAttribute("width", genislik);
+        klonSvg.setAttribute("height", yukseklik);
+
+        const svgVerisi = new XMLSerializer().serializeToString(klonSvg);
+        const svgBlob = new Blob([svgVerisi], { type: "image/svg+xml;charset=utf-8" });
+        const url = URL.createObjectURL(svgBlob);
+
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.createElement("canvas");
+            canvas.width = genislik;
+            canvas.height = yukseklik;
+            const ctx = canvas.getContext("2d");
+
+            // Arka planı sayfa rengiyle doldur
+            ctx.fillStyle = "#2c3e50";
+            ctx.fillRect(0, 0, genislik, yukseklik);
+            ctx.drawImage(img, 0, 0, genislik, yukseklik);
+            URL.revokeObjectURL(url);
+
+            const indirmeLinki = document.createElement("a");
+            indirmeLinki.download = "turkiye-haritasi.png";
+            indirmeLinki.href = canvas.toDataURL("image/png");
+            indirmeLinki.click();
+        };
+        img.src = url;
     }
 });
