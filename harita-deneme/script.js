@@ -9,6 +9,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const indirBtn = document.getElementById('indir-btn');
     const root = document.documentElement; 
 
+    // Orijinal rengi geri yükleyen yardımcı fonksiyon
+    function orijinalRengeDondur(parca) {
+        const orijinalFill = parca.getAttribute('data-orijinal-fill');
+        if (orijinalFill) {
+            parca.style.fill = orijinalFill;
+        } else {
+            parca.style.removeProperty('fill');
+        }
+        parca.removeAttribute('data-boyali');
+    }
+
     // Renk seçici
     if (renkSecici) {
         renkSecici.addEventListener('input', (e) => {
@@ -25,22 +36,21 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 1. HARİTAYI SIFIRLA BUTONU (Bağımsız çalışır)
+    // 1. HARİTAYI SIFIRLA BUTONU
     if (sifirlaBtn) {
         sifirlaBtn.addEventListener('click', () => {
             const boyaliParcalar = haritaAlani.querySelectorAll('svg path');
             boyaliParcalar.forEach(parca => {
-                parca.style.removeProperty('fill');
-                parca.removeAttribute('data-boyali');
+                orijinalRengeDondur(parca);
             });
-            isimAlani.textContent = "Harita sıfırlandı!";
+            isimAlani.textContent = "Harita orijinal haline döndürüldü!";
             setTimeout(() => {
                 isimAlani.textContent = "Bölge adını görmek için haritanın üzerine gelin";
             }, 1500);
         });
     }
 
-    // 2. PNG İNDİR BUTONU (Bağımsız çalışır)
+    // 2. PNG İNDİR BUTONU
     if (indirBtn) {
         indirBtn.addEventListener('click', () => {
             const svgElement = haritaAlani.querySelector('svg');
@@ -80,6 +90,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const ilGruplari = {};
             paths.forEach(path => {
+                // Harita ilk yüklendiğinde her parçanın kendi orijinal rengini kaydet
+                const mevcutInlineFill = path.style.fill || path.getAttribute('fill') || '';
+                if (mevcutInlineFill) {
+                    path.setAttribute('data-orijinal-fill', mevcutInlineFill);
+                }
+
                 const hamId = ilAdiniBul(path);
                 if (!hamId) return;
 
@@ -103,8 +119,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     ilParcalari.forEach(parca => {
                         if (mevcutRenk === seciliRenk) {
-                            parca.style.removeProperty('fill');
-                            parca.removeAttribute('data-boyali');
+                            // Aynı renkle tekrar tıklandığında da siyaha değil orijinal rengine döner
+                            orijinalRengeDondur(parca);
                         } else {
                             parca.style.setProperty('fill', seciliRenk, 'important');
                             parca.setAttribute('data-boyali', seciliRenk);
@@ -159,7 +175,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const klonSvg = svgElement.cloneNode(true);
         const kalinlik = kalinlikSecici ? kalinlikSecici.value + 'px' : '0.8px';
 
-        // SVG namespace zorunlu kıl (bazı tarayıcılarda indirme için şarttır)
         klonSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
 
         const styleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");
@@ -181,7 +196,6 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         klonSvg.insertBefore(styleEl, klonSvg.firstChild);
 
-        // Gerçek en-boy oranını hesapla
         const rect = svgElement.getBoundingClientRect();
         const oran = (rect.height && rect.width) ? (rect.height / rect.width) : 0.45;
         const genislik = 2000;
